@@ -22,7 +22,7 @@ public sealed class AnalizadorCodigoService
     /// <param name="nombreArchivo">Nombre base del archivo analizado.</param>
     /// <param name="lineasBrutas">Colección de líneas sin procesar.</param>
     /// <returns>Objeto <see cref="ResumenConteo"/> con los resultados.</returns>
-    public ResumenConteo Analizar(string nombreArchivo, IEnumerable<string> lineasBrutas)
+    public static ResumenConteo Analizar(string nombreArchivo, IEnumerable<string> lineasBrutas)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nombreArchivo);
         ArgumentNullException.ThrowIfNull(lineasBrutas);
@@ -240,8 +240,8 @@ public sealed class AnalizadorCodigoService
 
     private static bool EsFirmaMetodo(string linea)
     {
-        int apertura = linea.IndexOf('(', StringComparison.Ordinal);
-        int cierre = linea.LastIndexOf(')', StringComparison.Ordinal);
+        int apertura = linea.IndexOf('(');
+        int cierre = linea.LastIndexOf(')');
 
         if (apertura <= 0 || cierre <= apertura)
         {

@@ -25,16 +25,13 @@ public static class Aplicacion
 
         try
         {
-            var lector = new LectorCodigoFuente();
-            var archivos = lector.ObtenerArchivos(ruta);
-
-            var analizador = new AnalizadorCodigoService();
+            var archivos = LectorCodigoFuente.ObtenerArchivos(ruta);
             var resumenGlobal = new ResumenConteo();
 
             foreach (string archivo in archivos)
             {
-                string[] lineas = lector.LeerLineas(archivo);
-                var resumenArchivo = analizador.Analizar(Path.GetFileName(archivo), lineas);
+                string[] lineas = LectorCodigoFuente.LeerLineas(archivo);
+                var resumenArchivo = AnalizadorCodigoService.Analizar(Path.GetFileName(archivo), lineas);
 
                 foreach (var parte in resumenArchivo.Partes)
                 {

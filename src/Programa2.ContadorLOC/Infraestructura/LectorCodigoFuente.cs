@@ -15,7 +15,7 @@ public sealed class LectorCodigoFuente
     /// <param name="ruta">Ruta de archivo .cs o carpeta.</param>
     /// <returns>Lista de rutas de archivos encontrados.</returns>
     /// <exception cref="ArchivoNoValidoException">Se lanza si la ruta no existe o no tiene archivos .cs.</exception>
-    public IReadOnlyList<string> ObtenerArchivos(string ruta)
+    public static IReadOnlyList<string> ObtenerArchivos(string ruta)
     {
         if (string.IsNullOrWhiteSpace(ruta))
         {
@@ -59,7 +59,7 @@ public sealed class LectorCodigoFuente
     /// </summary>
     /// <param name="rutaArchivo">Ruta completa del archivo.</param>
     /// <returns>Arreglo con las líneas de texto.</returns>
-    public string[] LeerLineas(string rutaArchivo)
+    public static string[] LeerLineas(string rutaArchivo)
     {
         try
         {
