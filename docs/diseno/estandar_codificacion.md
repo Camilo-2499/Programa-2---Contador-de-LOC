@@ -8,7 +8,7 @@ Basado en: Convenciones de Microsoft para C# y Guía SEI PSP (Capítulo 3).
 
 ## 1. Estándar de conteo de tamaño (Size Counting Standard)
 
-En PSP1 es fundamental contar las **líneas de código físicas y lógicas** con una regla uniforme y reproducible.
+En PSP1 es fundamental contar las **líneas de código físicas y lógicas** con una regla uniforme, determinista y reproducible.
 
 ### Reglas de contabilización (¿Qué se cuenta y qué NO?):
 
@@ -17,23 +17,27 @@ En PSP1 es fundamental contar las **líneas de código físicas y lógicas** con
 | **Sentencias ejecutables** (asignaciones, llamadas, retornos) | **SÍ** | Representa esfuerzo lógico de desarrollo. |
 | **Declaraciones** (variables, propiedades, campos, firmas de clase y método) | **SÍ** | Define estructuras y contratos de datos. |
 | **Estructuras de control** (`if`, `for`, `while`, `switch`) | **SÍ** | Lógica de flujo del programa. |
+| **Línea de código con comentario al final** (`x = 1; // nota`) | **SÍ** | Se elimina el comentario y la sentencia remanente se cuenta como 1 LOC. |
 | **Líneas en blanco** o con solo espacios / tabulaciones | **NO** | No contienen información lógica. |
-| **Comentarios de una línea** (`// ...`) | **NO** | Documentación, no código ejecutable. |
-| **Bloques de comentarios** (`/* ... */`) | **NO** | Documentación de bloque. |
+| **Líneas completas de comentario de una línea** (`// ...`, `/// ...`) | **NO** | Documentación, no código ejecutable. |
+| **Bloques de comentarios** (`/* ... */`) | **NO** | Documentación de bloque multilínea. |
 | **Directivas de importación** (`using ...;`) | **NO** | Dependencias de espacio de nombres, no lógica del módulo. |
+| **Directivas del preprocesador** (`#nullable`, `#region`, `#endregion`) | **NO** | Metadatos e instrucciones del editor/compilador. |
 | **Líneas que contienen únicamente llaves** (`{` o `}`) | **NO** | Delimitadores sintácticos de bloque en estilo Allman. |
 
 ---
 
 ## 2. Definición de Partes e Ítems en C#
 
-* **Parte (Part):** Cada tipo definido por el usuario: `class`, `struct`, `record` o `interface`.
-  * Una parte inicia en la línea donde se declara (ej. `public class CalculadoraEstadistica`).
-  * Termina cuando se cierra la llave `}` correspondiente a ese bloque de clase (control de llaves balanceadas).
-* **Ítem (Item):** Cada función miembro de la parte:
+* **Parte (Part):** 
+  * Cada tipo formal definido en el código: `class`, `struct`, `record` o `interface`.
+  * **Caso especial (Top-Level Statements):** Si un archivo `.cs` (como `Program.cs` en .NET 9) contiene sentencias ejecutables sin envoltorio explícito de clase, se contabiliza como una parte llamada `Program` (o el nombre del archivo).
+  * Una parte inicia en la declaración del tipo y finaliza al cerrar la llave de su bloque (`nivelLlaves == 0`).
+* **Ítem (Item):** Cada función miembro perteneciente a la parte:
   * Métodos (`public void Metodo()`, `private int Sumar(int a, int b)`).
-  * Constructores (`public MiClase()`).
-  * No se cuentan como ítems independientes las propiedades automáticas de una sola línea (`public int Id { get; set; }`), aunque sus líneas sí se suman al tamaño de la parte si tienen lógica.
+  * Constructores (`public MiClase(...)`).
+  * En archivos con sentencias Top-Level (`Program.cs`), el punto de entrada principal se contabiliza como 1 ítem (`Main`).
+  * **Regla de anidamiento:** Un método solo se identifica cuando se declara en el nivel inmediatamente interno a la clase (`nivelLlavesClase == 1`). Las llamadas internas dentro del cuerpo de un método no son ítems.
 
 ---
 

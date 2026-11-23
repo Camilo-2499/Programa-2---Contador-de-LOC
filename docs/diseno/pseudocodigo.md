@@ -10,55 +10,63 @@ Este documento define el algoritmo detallado del analizador sintáctico/léxico 
 ## 1. Algoritmo principal de análisis (`AnalizadorCodigoService.Analizar`)
 
 ```text
-FUNCIÓN Analizar(lineasBrutas : Colección de Cadenas) : ResumenConteo
+FUNCIÓN Analizar(nombreArchivo : Cadena, lineasBrutas : Colección de Cadenas) : ResumenConteo
     resumen ← nuevo ResumenConteo()
     lineasLimpias ← FiltrarComentariosDeBloque(lineasBrutas)
     
     parteActual ← nulo
     nivelLlavesClase ← 0
     enClase ← FALSO
+    tieneTopLevel ← FALSO
     
-    PARA CADA linea EN lineasLimpias HACER
-        lineaTrim ← QuitarEspacios(linea)
+    PARA CADA lineaBruta EN lineasLimpias HACER
+        // 1. Quitar comentarios inline y espacios extremos
+        linea ← SanitizarLinea(lineaBruta)
         
-        // 1. Filtrar líneas no contabilizables
-        SI EsLineaNoContable(lineaTrim) ENTONCES
+        // 2. Filtrar líneas no contabilizables
+        SI EsLineaNoContable(linea) ENTONCES
             CONTINUAR
         FIN SI
         
-        // 2. Detección de inicio de clase/struct/interface
-        SI NO enClase Y EsInicioDeTipo(lineaTrim, nombreTipo) ENTONCES
+        // 3. Detección de inicio de clase/struct/interface/record
+        SI NO enClase Y EsInicioDeTipo(linea, nombreTipo) ENTONCES
             parteActual ← nueva ParteInfo(nombreTipo)
             enClase ← VERDADERO
-            nivelLlavesClase ← ContarAperturas(lineaTrim) - ContarCierres(lineaTrim)
+            nivelLlavesClase ← ContarLlavesAperturaFueraDeComillas(linea) - ContarLlavesCierreFueraDeComillas(linea)
             parteActual.IncrementarLoc()
             CONTINUAR
         FIN SI
         
-        // 3. Procesamiento dentro de la clase
+        // 4. Procesamiento dentro de una clase
         SI enClase ENTONCES
-            nivelLlavesClase ← nivelLlavesClase + ContarAperturas(lineaTrim) - ContarCierres(lineaTrim)
+            nivelLlavesClase ← nivelLlavesClase + ContarLlavesAperturaFueraDeComillas(linea) - ContarLlavesCierreFueraDeComillas(linea)
             
-            // Detección de métodos / constructores
-            SI EsFirmaMetodo(lineaTrim) ENTONCES
+            // Un método SOLO puede declararse a nivel 1 de anidamiento dentro de la clase
+            SI nivelLlavesClase == 1 Y EsFirmaMetodo(linea) ENTONCES
                 parteActual.IncrementarItems()
             FIN SI
             
             parteActual.IncrementarLoc()
             
-            // Si las llaves llegaron a cero, se cerró la clase
+            // Si las llaves de la clase se cierran por completo
             SI nivelLlavesClase <= 0 ENTONCES
                 resumen.AgregarParte(parteActual)
                 parteActual ← nulo
                 enClase ← FALSO
+                nivelLlavesClase ← 0
             FIN SI
         SINO
-            // Código fuera de clase (ej. archivos con declaraciones de nivel superior)
-            resumen.IncrementarLocGlobal()
+            // 5. Caso especial: Top-Level Statements (ej. Program.cs de .NET 9 sin clase)
+            SI parteActual == nulo ENTONCES
+                parteActual ← nueva ParteInfo(ObtenerNombreBase(nombreArchivo))
+                parteActual.IncrementarItems() // Se contabiliza el punto de entrada como 1 ítem (Main)
+                tieneTopLevel ← VERDADERO
+            FIN SI
+            parteActual.IncrementarLoc()
         FIN SI
     FIN PARA
     
-    // Si quedó una parte abierta por ausencia de llaves en la misma línea
+    // Si quedaron sentencias Top-Level o una clase sin cierre explícito en la última línea
     SI parteActual != nulo ENTONCES
         resumen.AgregarParte(parteActual)
     FIN SI
@@ -69,23 +77,32 @@ FIN
 
 ---
 
-## 2. Detección de líneas no contabilizables (`EsLineaNoContable`)
+## 2. Sanitización y detección de líneas no contabilizables
 
 ```text
+FUNCIÓN SanitizarLinea(linea : Cadena) : Cadena
+    // Si contiene "//", eliminar el comentario inline preservando lo que esté entre comillas
+    lineaSinComentario ← TruncarComentarioInline(linea)
+    RETORNAR QuitarEspaciosExtremos(lineaSinComentario)
+FIN
+
 FUNCIÓN EsLineaNoContable(linea : Cadena) : Booleano
-    SI linea es Vacía O TieneSoloEspacios ENTONCES
+    SI linea es Vacía ENTONCES
         RETORNAR VERDADERO
     FIN SI
     
-    SI linea empieza con "//" ENTONCES
+    // Llaves aisladas
+    SI linea == "{" O linea == "}" O linea == "{}" ENTONCES
         RETORNAR VERDADERO
     FIN SI
     
-    SI linea es exactamente "{" O es exactamente "}" ENTONCES
+    // Directivas de espacio de nombres
+    SI empiezaCon(linea, "using ") Y terminaCon(linea, ";") ENTONCES
         RETORNAR VERDADERO
     FIN SI
     
-    SI linea empieza con "using " Y termina con ";" ENTONCES
+    // Directivas del preprocesador
+    SI empiezaCon(linea, "#") ENTONCES
         RETORNAR VERDADERO
     FIN SI
     
@@ -137,12 +154,12 @@ FIN
 
 ```text
 FUNCIÓN EsFirmaMetodo(linea : Cadena) : Booleano
-    // Debe contener paréntesis de parámetros, pero no ser estructura de control ni llamada
+    // Debe tener paréntesis para argumentos
     SI NO contiene(linea, "(") O NO contiene(linea, ")") ENTONCES
         RETORNAR FALSO
     FIN SI
     
-    // Descartar if, for, while, switch, catch, etc.
+    // Descartar estructuras de control de flujo
     palabrasControl ← ["if", "for", "foreach", "while", "switch", "catch", "using", "lock"]
     PARA CADA palabra EN palabrasControl HACER
         SI empiezaCon(linea, palabra + "(") O empiezaCon(linea, palabra + " ") ENTONCES
@@ -150,52 +167,42 @@ FUNCIÓN EsFirmaMetodo(linea : Cadena) : Booleano
         FIN SI
     FIN PARA
     
-    // No debe ser instanciación (new) ni asignación típica
+    // Descartar retornos, asignaciones típicas y llamadas
     SI empiezaCon(linea, "return ") O contiene(linea, " = ") ENTONCES
         RETORNAR FALSO
     FIN SI
     
-    // Si tiene modificador de acceso o tipo de retorno y termina con bloque o sin punto y coma directo
+    // Un método o constructor contiene modificadores de acceso o tipo de retorno
     RETORNAR VERDADERO
 FIN
 ```
 
 ---
 
-## 5. Prueba de escritorio manual (Verificación pre-código)
-
-Dado el siguiente código de prueba:
+## 5. Prueba de escritorio manual con Top-Level Statements y comentarios inline
 
 ```csharp
-// Comentario simple
-using System;
+// PSP0 · Programa 1
+using Programa1.Estadistica;
 
-public class Calculadora
-{
-    public int Sumar(int a, int b)
-    {
-        return a + b;
-    }
-}
+Console.OutputEncoding = Encoding.UTF8; // comentario inline
+
+return Aplicacion.Ejecutar(args, Console.In, Console.Out);
 ```
 
-| Línea | Contenido | ¿Se cuenta? | LOC acumulada | ¿Es clase? | ¿Es método? |
+| Línea | Contenido | Sanitizado | ¿Se cuenta? | LOC acumulada | Parte / Ítem |
 |---|---|---|---|---|---|
-| 1 | `// Comentario simple` | No (comentario) | 0 | No | No |
-| 2 | `using System;` | No (using) | 0 | No | No |
-| 3 | *(vacía)* | No (blanco) | 0 | No | No |
-| 4 | `public class Calculadora` | Sí | 1 | Sí (`Calculadora`) | No |
-| 5 | `{` | No (llave sola) | 1 | - | - |
-| 6 | `public int Sumar(int a, int b)` | Sí | 2 | - | Sí (Ítem 1) |
-| 7 | `{` | No (llave sola) | 2 | - | - |
-| 8 | `return a + b;` | Sí | 3 | - | No |
-| 9 | `}` | No (llave sola) | 3 | - | - |
-| 10 | `}` | No (llave sola) | 3 | Cierra clase | - |
+| 1 | `// PSP0 · Programa 1` | `""` | No (vacía) | 0 | - |
+| 2 | `using Programa1...;` | `using Programa1...;` | No (using) | 0 | - |
+| 3 | *(vacía)* | `""` | No (vacía) | 0 | - |
+| 4 | `Console.Output...; // com` | `Console.OutputEncoding = ...;` | Sí | 1 | Parte `Program` (Ítem 1) |
+| 5 | *(vacía)* | `""` | No (vacía) | 1 | - |
+| 6 | `return Aplicacion...;` | `return Aplicacion...;` | Sí | 2 | Parte `Program` |
 
 **Resultado esperado:**
-* Parte: `Calculadora`
-* Número de Ítems: 1
-* LOC de la Parte: 3
-* Total LOC: 3
+* Parte: `Program`
+* Cantidad de Ítems: 1
+* LOC de la Parte: 2 LOC
+* Total LOC: 2 LOC
 
-El algoritmo produce exactamente el resultado previsto antes de comenzar la codificación.
+El algoritmo procesa tanto clases tradicionales como sentencias de nivel superior de manera consistente.
