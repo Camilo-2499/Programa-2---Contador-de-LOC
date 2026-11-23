@@ -37,27 +37,64 @@ public sealed class AnalizadorCodigoService
         foreach (var lineaBruta in lineasLimpias)
         {
             string linea = SanitizarLinea(lineaBruta);
-            if (EsLineaNoContable(linea))
+            if (string.IsNullOrWhiteSpace(linea))
             {
                 continue;
             }
+
+            int diffLlaves = ContarDiferenciaLlaves(linea);
 
             if (!enClase && IntentarDetectarTipo(linea, out string? nombreTipo))
             {
                 parteActual = new ParteInfo(nombreTipo!);
                 enClase = true;
-                nivelLlavesClase = ContarDiferenciaLlaves(linea);
-                parteActual.IncrementarLoc();
+                nivelLlavesClase = diffLlaves;
+                if (!EsLineaNoContable(linea))
+                {
+                    parteActual.IncrementarLoc();
+                }
+
+                if (nivelLlavesClase <= 0 && linea.Contains('{') && linea.Contains('}'))
+                {
+                    resumen.AgregarParte(parteActual);
+                    parteActual = null;
+                    enClase = false;
+                    nivelLlavesClase = 0;
+                }
                 continue;
             }
 
             if (enClase)
             {
-                ProcesarLineaEnClase(linea, ref nivelLlavesClase, ref enClase, ref parteActual, resumen);
+                nivelLlavesClase += diffLlaves;
+
+                if (!EsLineaNoContable(linea))
+                {
+                    // Un método se declara cuando el anidamiento respecto a la clase es 1
+                    // (antes de entrar a sus llaves internas)
+                    int nivelAntesDeLinea = nivelLlavesClase - diffLlaves;
+                    if ((nivelAntesDeLinea == 1 || nivelLlavesClase == 1) && EsFirmaMetodo(linea))
+                    {
+                        parteActual!.IncrementarItems();
+                    }
+
+                    parteActual!.IncrementarLoc();
+                }
+
+                if (nivelLlavesClase <= 0)
+                {
+                    resumen.AgregarParte(parteActual!);
+                    parteActual = null;
+                    enClase = false;
+                    nivelLlavesClase = 0;
+                }
             }
             else
             {
-                ProcesarLineaTopLevel(linea, nombreArchivo, ref parteActual);
+                if (!EsLineaNoContable(linea))
+                {
+                    ProcesarLineaTopLevel(linea, nombreArchivo, ref parteActual);
+                }
             }
         }
 
@@ -67,31 +104,6 @@ public sealed class AnalizadorCodigoService
         }
 
         return resumen;
-    }
-
-    private static void ProcesarLineaEnClase(
-        string linea,
-        ref int nivelLlavesClase,
-        ref bool enClase,
-        ref ParteInfo? parteActual,
-        ResumenConteo resumen)
-    {
-        nivelLlavesClase += ContarDiferenciaLlaves(linea);
-
-        if (nivelLlavesClase == 1 && EsFirmaMetodo(linea))
-        {
-            parteActual!.IncrementarItems();
-        }
-
-        parteActual!.IncrementarLoc();
-
-        if (nivelLlavesClase <= 0)
-        {
-            resumen.AgregarParte(parteActual);
-            parteActual = null;
-            enClase = false;
-            nivelLlavesClase = 0;
-        }
     }
 
     private static void ProcesarLineaTopLevel(string linea, string nombreArchivo, ref ParteInfo? parteActual)
@@ -217,7 +229,7 @@ public sealed class AnalizadorCodigoService
     private static bool IntentarDetectarTipo(string linea, out string? nombreTipo)
     {
         nombreTipo = null;
-        var tokens = linea.Split([' ', '\t', ':', '{'], StringSplitOptions.RemoveEmptyEntries);
+        var tokens = linea.Split([' ', '\t', ':', '{', '('], StringSplitOptions.RemoveEmptyEntries);
 
         for (int i = 0; i < tokens.Length; i++)
         {
@@ -229,7 +241,7 @@ public sealed class AnalizadorCodigoService
                     candidato = tokens[i + 2];
                 }
 
-                int idxGenerico = candidato.IndexOf('<', StringComparison.Ordinal);
+                int idxGenerico = candidato.IndexOfAny(['<', '(']);
                 nombreTipo = idxGenerico >= 0 ? candidato[..idxGenerico] : candidato;
                 return true;
             }
