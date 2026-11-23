@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Programa2.ContadorLOC</RootNamespace>
+    <AssemblyName>Programa2</AssemblyName>
+    <!-- Estándar de codificación: ninguna advertencia se deja pasar -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Programa2.ContadorLOC.Tests" />
+  </ItemGroup>
+
+</Project>
