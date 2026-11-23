@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace Programa2.ContadorLOC.Dominio;
 
 /// <summary>
@@ -15,7 +13,7 @@ public sealed class AnalizadorCodigoService
 
     private static readonly string[] ModificadoresTipo =
     [
-        "class", "struct", "interface", "record"
+        "class", "struct", "interface", "record", "enum"
     ];
 
     /// <summary>
@@ -226,6 +224,11 @@ public sealed class AnalizadorCodigoService
             if (ModificadoresTipo.Contains(tokens[i], StringComparer.Ordinal) && i + 1 < tokens.Length)
             {
                 string candidato = tokens[i + 1];
+                if ((candidato is "class" or "struct") && i + 2 < tokens.Length)
+                {
+                    candidato = tokens[i + 2];
+                }
+
                 int idxGenerico = candidato.IndexOf('<', StringComparison.Ordinal);
                 nombreTipo = idxGenerico >= 0 ? candidato[..idxGenerico] : candidato;
                 return true;
